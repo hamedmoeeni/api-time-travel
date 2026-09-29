@@ -1,3 +1,7 @@
 spring:
   application:
     name: api-time-travel
+
+att:
+  management:
+    uri-path: /mgmt

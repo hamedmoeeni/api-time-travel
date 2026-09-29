@@ -1,0 +1,12 @@
+package hamedmoeeni.api_time_travel.adapter.rest;
+
+import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import org.mapstruct.Mapper;
+
+@Mapper(componentModel = "spring")
+public interface RouteDtoMapper {
+
+    RouteDto toDto(Route route);
+
+    Route fromDto(RouteDto routeDto);
+}
