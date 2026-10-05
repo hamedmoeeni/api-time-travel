@@ -1,6 +1,8 @@
 package hamedmoeeni.api_time_travel.adapter.rest;
 
 import hamedmoeeni.api_time_travel.usecase.routing.RoutingManager;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -33,5 +35,18 @@ public class RoutingController {
         return routingManager.getRoutes()
                 .map(routeDtoMapper::toDto)
                 .collect(Collectors.toList());
+    }
+
+    @DeleteMapping("/routes")
+    public Mono<ResponseEntity<Object>> deleteRoutes(@RequestBody LinkedList<String>routeIds) {
+        return routingManager.deleteRoutes(routeIds)
+                .onErrorReturn(false)
+                .map(r->{
+                    if(r){
+                        return ResponseEntity.ok().build();
+                    }else {
+                        return ResponseEntity.status(HttpStatus.CONFLICT).build();
+                    }
+                });
     }
 }

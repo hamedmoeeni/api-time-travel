@@ -7,7 +7,9 @@ import reactor.core.publisher.Mono;
 import java.util.Collection;
 
 public interface RoutingInfrastructure {
-    Mono<?> updateRoutes(Collection<Route> routes);
+    Mono<Boolean> saveRoutes(Collection<Route> routes);
 
     Flux<Route> getRoutes();
+
+    Mono<Boolean> removeRoutes(Collection<String> routeIds);
 }

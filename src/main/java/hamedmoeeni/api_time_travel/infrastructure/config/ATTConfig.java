@@ -8,4 +8,5 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @SuppressWarnings("unused")
 public class ATTConfig {
     private Management management;
+    private PersistenceType persistenceType;
 }

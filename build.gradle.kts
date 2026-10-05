@@ -26,10 +26,13 @@ dependencies {
 	annotationProcessor("org.projectlombok:lombok")
 	implementation("org.mapstruct:mapstruct:1.6.3")
 	annotationProcessor("org.mapstruct:mapstruct-processor:1.6.3")
+	implementation("org.springframework.boot:spring-boot-starter-data-redis-reactive")
+
 	testImplementation("org.springframework.boot:spring-boot-starter-webflux-test")
 	testImplementation("io.projectreactor:reactor-test")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 	testImplementation("org.wiremock.integrations:wiremock-spring-boot:4.0.9")
+	testImplementation("org.springframework.boot:spring-boot-starter-data-redis-reactive-test")
 }
 
 dependencyManagement {

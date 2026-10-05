@@ -16,12 +16,17 @@ class RoutingManagerImpl implements RoutingManager {
     }
 
     @Override
-    public Mono<?> updateRoutes(Collection<Route> routes) {
+    public Mono<Boolean> updateRoutes(Collection<Route> routes) {
         return routingAdapter.updateRoutes(routes);
     }
 
     @Override
     public Flux<Route> getRoutes() {
         return routingAdapter.getRoutes();
+    }
+
+    @Override
+    public Mono<Boolean> deleteRoutes(Collection<String> routeIds) {
+        return routingAdapter.deleteRoutes(routeIds);
     }
 }

@@ -6,6 +6,7 @@ import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.event.RefreshRoutesEvent;
+import org.springframework.cloud.gateway.route.RouteDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinitionRepository;
 import org.springframework.cloud.gateway.route.RouteDefinitionWriter;
 import org.springframework.cloud.gateway.route.RouteLocator;
@@ -18,6 +19,8 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.Collection;
+import java.util.List;
+import java.util.UUID;
 
 @Component
 public class RoutingInfrastructureImpl implements RoutingInfrastructure, ApplicationEventPublisherAware {
@@ -49,26 +52,42 @@ public class RoutingInfrastructureImpl implements RoutingInfrastructure, Applica
                 .build();
     }
 
-
     @Override
-    public Mono<?> updateRoutes(Collection<Route> routes) {
+    public Mono<Boolean> saveRoutes(Collection<Route> routes) {
 
-        return Mono.zip(
-                routes.stream().map(route ->
-                                routeDefinitionWriter.save(Mono.create(sink ->
-                                        sink.success(routeDefinitionMapper.toRouteDefinition(route)))
-                                ))
-                        .toList(),
-                objects -> objects)
+        List<Mono<Void>> list = routes.stream().map(route -> {
+                            RouteDefinition routeDefinition = routeDefinitionMapper.toRouteDefinition(route);
+                            if (routeDefinition.getId() == null) {
+                                routeDefinition.setId(UUID.randomUUID().toString());
+                            }
+                            return routeDefinitionWriter.save(Mono.just(routeDefinition));
+                        }
+                )
+                .toList();
+
+        return Mono.zip(list, _ -> true)
                 .doOnSuccess(_ -> {
-                    logger.info("Refreshing routes");
+                    logger.info("Refreshing routes after saving");
                     applicationEventPublisher.publishEvent(new RefreshRoutesEvent(this));
                 })
-                .doOnError(throwable -> logger.info("error: "+throwable.getMessage()));
+                .doOnError(throwable -> logger.error("Error refreshing routes after saving", throwable));
     }
 
     @Override
     public Flux<Route> getRoutes() {
         return routeDefinitionRepository.getRouteDefinitions().map(routeDefinitionMapper::fromRouteDefinition);
+    }
+
+    @Override
+    public Mono<Boolean> removeRoutes(Collection<String> routeIds) {
+        return Mono.zip(
+                        routeIds.stream()
+                                .map(routeId -> routeDefinitionWriter.delete(Mono.just(routeId))).toList(),
+                        _ -> true)
+                .doOnSuccess(_ -> {
+                    logger.info("Refreshing routes after removing");
+                    applicationEventPublisher.publishEvent(new RefreshRoutesEvent(this));
+                })
+                .doOnError(throwable -> logger.error("Error refreshing routes after removing", throwable));
     }
 }
