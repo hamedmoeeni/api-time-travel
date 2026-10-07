@@ -1,4 +1,4 @@
-package hamedmoeeni.api_time_travel.adapter.rest;
+package hamedmoeeni.api_time_travel.adapter.rest.routing;
 
 import hamedmoeeni.api_time_travel.usecase.routing.RoutingManager;
 import org.springframework.http.HttpStatus;
@@ -11,7 +11,7 @@ import java.util.LinkedList;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("${att.management.uri-path}")
+@RequestMapping("${att.management.uri-path}/routes")
 public class RoutingController {
     private final RoutingManager routingManager;
     private final RouteDtoMapper routeDtoMapper;
@@ -22,7 +22,7 @@ public class RoutingController {
         this.routeDtoMapper = routeDtoMapper;
     }
 
-    @PostMapping("/routes")
+    @PostMapping
     public Mono<Object> saveRoutes(@RequestBody LinkedList<RouteDto> routes) {
         return routingManager.updateRoutes(
                         routes.stream().map(routeDtoMapper::fromDto).collect(Collectors.toList())
@@ -30,14 +30,14 @@ public class RoutingController {
                 .map(_ -> new Object());
     }
 
-    @GetMapping("/routes")
+    @GetMapping
     public Mono<Collection<RouteDto>> getRoutes() {
         return routingManager.getRoutes()
                 .map(routeDtoMapper::toDto)
                 .collect(Collectors.toList());
     }
 
-    @DeleteMapping("/routes")
+    @DeleteMapping
     public Mono<ResponseEntity<Object>> deleteRoutes(@RequestBody LinkedList<String>routeIds) {
         return routingManager.deleteRoutes(routeIds)
                 .onErrorReturn(false)

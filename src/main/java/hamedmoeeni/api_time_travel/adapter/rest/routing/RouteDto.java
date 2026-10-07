@@ -1,4 +1,4 @@
-package hamedmoeeni.api_time_travel.adapter.rest;
+package hamedmoeeni.api_time_travel.adapter.rest.routing;
 
 import lombok.Data;
 
