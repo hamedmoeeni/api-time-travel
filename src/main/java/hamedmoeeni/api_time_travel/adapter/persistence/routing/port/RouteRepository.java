@@ -1,6 +1,6 @@
-package hamedmoeeni.api_time_travel.adapter.persistence.routing;
+package hamedmoeeni.api_time_travel.adapter.persistence.routing.port;
 
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 

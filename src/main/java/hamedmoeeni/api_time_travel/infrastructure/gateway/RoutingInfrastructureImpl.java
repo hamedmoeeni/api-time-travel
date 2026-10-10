@@ -1,7 +1,7 @@
-package hamedmoeeni.api_time_travel.infrastructure.routing;
+package hamedmoeeni.api_time_travel.infrastructure.gateway;
 
-import hamedmoeeni.api_time_travel.adapter.routing.RoutingInfrastructure;
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.adapter.persistence.routing.port.RoutingInfrastructure;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import org.jspecify.annotations.NonNull;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,7 +23,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Component
-public class RoutingInfrastructureImpl implements RoutingInfrastructure, ApplicationEventPublisherAware {
+class RoutingInfrastructureImpl implements RoutingInfrastructure, ApplicationEventPublisherAware {
     private final Logger logger = LoggerFactory.getLogger(RoutingInfrastructureImpl.class);
     private final RouteDefinitionWriter routeDefinitionWriter;
     private final RouteDefinitionRepository routeDefinitionRepository;

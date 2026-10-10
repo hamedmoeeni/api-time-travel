@@ -1,10 +1,10 @@
-package hamedmoeeni.api_time_travel.adapter.persistence.routing;
+package hamedmoeeni.api_time_travel.infrastructure.persistence.routing;
 
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")
-public interface RouteEntityMapper {
+interface RouteEntityMapper {
 
     Route fromRouteEntity(RouteEntity routeEntity);
 

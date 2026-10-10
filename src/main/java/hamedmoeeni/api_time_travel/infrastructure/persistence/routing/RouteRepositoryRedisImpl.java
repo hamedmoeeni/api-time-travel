@@ -1,6 +1,7 @@
-package hamedmoeeni.api_time_travel.adapter.persistence.routing;
+package hamedmoeeni.api_time_travel.infrastructure.persistence.routing;
 
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.adapter.persistence.routing.port.RouteRepository;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveHashOperations;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
         havingValue = "REDIS",
         matchIfMissing = true //redis is default persistence repository
 )
-public class RouteRepositoryRedisImpl implements RouteRepository {
+class RouteRepositoryRedisImpl implements RouteRepository {
     private static final String ROUTE_ENTITY_NAME = "RouteEntity";
     private final RouteEntityMapper routeEntityMapper;
     private final ReactiveHashOperations<String, String, RouteEntity> redisOperations;

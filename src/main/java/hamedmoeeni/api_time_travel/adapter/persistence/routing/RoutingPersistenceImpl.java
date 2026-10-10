@@ -1,8 +1,9 @@
-package hamedmoeeni.api_time_travel.adapter.routing;
+package hamedmoeeni.api_time_travel.adapter.persistence.routing;
 
-import hamedmoeeni.api_time_travel.adapter.persistence.routing.RouteRepository;
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
-import hamedmoeeni.api_time_travel.usecase.routing.RoutingAdapter;
+import hamedmoeeni.api_time_travel.adapter.persistence.routing.port.RouteRepository;
+import hamedmoeeni.api_time_travel.adapter.persistence.routing.port.RoutingInfrastructure;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
+import hamedmoeeni.api_time_travel.usecase.routing.port.RoutingPersistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -12,12 +13,12 @@ import reactor.core.publisher.Mono;
 import java.util.Collection;
 
 @Service
-public class RoutingAdapterImpl implements RoutingAdapter {
-    private final Logger logger = LoggerFactory.getLogger(RoutingAdapterImpl.class);
+class RoutingPersistenceImpl implements RoutingPersistence , RoutingPersistenceInitiator {
+    private final Logger logger = LoggerFactory.getLogger(RoutingPersistenceImpl.class);
     private final RoutingInfrastructure routingInfrastructure;
     private final RouteRepository routeRepository;
 
-    public RoutingAdapterImpl(RoutingInfrastructure routingInfrastructure, RouteRepository routeRepository) {
+    public RoutingPersistenceImpl(RoutingInfrastructure routingInfrastructure, RouteRepository routeRepository) {
         this.routingInfrastructure = routingInfrastructure;
         this.routeRepository = routeRepository;
     }

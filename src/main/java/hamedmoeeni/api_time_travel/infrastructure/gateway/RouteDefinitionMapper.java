@@ -1,6 +1,6 @@
-package hamedmoeeni.api_time_travel.infrastructure.routing;
+package hamedmoeeni.api_time_travel.infrastructure.gateway;
 
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import org.mapstruct.Mapper;
 import org.springframework.cloud.gateway.handler.predicate.PredicateDefinition;
 import org.springframework.cloud.gateway.route.RouteDefinition;
@@ -11,7 +11,7 @@ import java.util.List;
 import java.util.UUID;
 
 @Mapper(componentModel = "spring")
-public interface RouteDefinitionMapper {
+interface RouteDefinitionMapper {
 
     default RouteDefinition toRouteDefinition(Route route) {
         if (route == null) {

@@ -1,6 +1,6 @@
 package hamedmoeeni.api_time_travel.adapter.rest.routing;
 
-import hamedmoeeni.api_time_travel.usecase.routing.Route;
+import hamedmoeeni.api_time_travel.domain.routing.Route;
 import org.mapstruct.Mapper;
 
 @Mapper(componentModel = "spring")

@@ -1,4 +1,4 @@
-package hamedmoeeni.api_time_travel.adapter.persistence.routing;
+package hamedmoeeni.api_time_travel.infrastructure.persistence.routing;
 
 import lombok.Data;
 

@@ -1,4 +1,4 @@
-package hamedmoeeni.api_time_travel.usecase.routing;
+package hamedmoeeni.api_time_travel.domain.routing;
 
 import lombok.Data;
 

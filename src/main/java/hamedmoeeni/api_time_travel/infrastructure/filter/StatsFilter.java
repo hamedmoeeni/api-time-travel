@@ -1,13 +1,14 @@
 package hamedmoeeni.api_time_travel.infrastructure.filter;
 
-import lombok.Getter;
-import lombok.Setter;
+import hamedmoeeni.api_time_travel.adapter.collector.stats.port.StatsDataCollectorInfrastructure;
+import hamedmoeeni.api_time_travel.domain.stats.Stats;
 import org.reactivestreams.Publisher;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
@@ -27,15 +28,33 @@ import java.time.Duration;
 import java.time.ZonedDateTime;
 
 @Component
-public class StatsFilter implements GlobalFilter, Ordered {
+class StatsFilter implements GlobalFilter, Ordered, StatsDataCollectorInfrastructure {
     private static final String ATTRIBUTE_TIMESTAMP = "TIMESTAMP";
-    private final Logger logger = LoggerFactory.getLogger(StatsFilter.class);
-    @Getter
-    @Setter
+    private final ApplicationEventPublisher applicationEventPublisher;
+
     private boolean storeBodies = false;
-    @Getter
-    @Setter
     private boolean bypassed = false;
+
+    StatsFilter(ApplicationEventPublisher applicationEventPublisher) {
+        this.applicationEventPublisher = applicationEventPublisher;
+    }
+
+
+    @Override
+    public Mono<Boolean> enable(boolean enable) {
+        return Mono.fromCallable(() -> {
+            this.bypassed = !enable;
+            return true;
+        });
+    }
+
+    @Override
+    public Mono<Boolean> enablePlayback(boolean enable) {
+        return Mono.fromCallable(() -> {
+            this.storeBodies = enable;
+            return true;
+        });
+    }
 
     @Override
     public int getOrder() {
@@ -125,10 +144,17 @@ public class StatsFilter implements GlobalFilter, Ordered {
         String url = request.getURI().toString();
         String method = request.getMethod().toString();
         String headers = request.getHeaders().toString();
-        //Store
-        logger.info("request requestId: {}, routeId: {}, timeStamp: {},  url: {}, method: {}, headers: {}, body: {}",
-                requestId, routeId, now, url, method, headers,
-                bodyStr == null ? null : bodyStr.replace("\n", " "));
+        //Event
+        this.applicationEventPublisher.publishEvent(
+                new Stats()
+                        .setRequestId(requestId)
+                        .setRouteId(routeId)
+                        .setTimestamp(now)
+                        .setUrl(url)
+                        .setMethod(method)
+                        .setRequestHeaders(headers)
+                        .setRequestBody(bodyStr)
+        );
     }
 
     private void storeResponseDetails(ServerWebExchange exchange, ServerHttpResponse response) {
@@ -147,9 +173,15 @@ public class StatsFilter implements GlobalFilter, Ordered {
         if (requestTimeStamp instanceof ZonedDateTime) {
             duration = Duration.between((ZonedDateTime) requestTimeStamp, ZonedDateTime.now()).toMillis();
         }
-        //Store
-        logger.info("response requestId: {}, duration: {}, status: {}, headers: {}, body: {}",
-                requestId, duration, status, headers,
-                bodyStr == null ? null : bodyStr.replace("\n", " "));
+        //Event
+        this.applicationEventPublisher.publishEvent(
+                new Stats()
+                        .setRequestId(requestId)
+                        .setDuration(duration)
+                        .setResponseStatus(status)
+                        .setResponseHeaders(headers)
+                        .setResponseBody(bodyStr)
+        );
     }
+
 }
