@@ -14,6 +14,6 @@ public class StatsEventListener {
 
     @EventListener(Stats.class)
     public void onStatsEvent(Stats stats){
-        this.statsEventListener.onStats(stats);
+        this.statsEventListener.onStats(stats).subscribe();
     }
 }

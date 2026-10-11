@@ -3,6 +3,7 @@ package hamedmoeeni.api_time_travel.adapter.event.stats;
 import hamedmoeeni.api_time_travel.domain.stats.Stats;
 import hamedmoeeni.api_time_travel.usecase.stats.StatsManger;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Mono;
 
 @Service
 class StatsEventListenerImpl implements StatsEventListener{
@@ -13,7 +14,7 @@ class StatsEventListenerImpl implements StatsEventListener{
     }
 
     @Override
-    public void onStats(Stats stats) {
-        statsManger.saveStats(stats);
+    public Mono<Boolean> onStats(Stats stats) {
+        return statsManger.saveStats(stats);
     }
 }
