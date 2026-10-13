@@ -1,6 +1,6 @@
 package hamedmoeeni.api_time_travel;
 
-import hamedmoeeni.api_time_travel.adapter.rest.RouteDto;
+import hamedmoeeni.api_time_travel.adapter.rest.routing.RouteDto;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
