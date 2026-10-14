@@ -44,7 +44,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
     }
 
     @PostConstruct
-    public void init() {
+    protected void init() {
         createIndex();
     }
 
@@ -56,6 +56,8 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
                                 ", '$.routeId', 'AS', 'routeId', 'TEXT'" +
                                 ", '$.method', 'AS', 'method', 'TEXT'" +
                                 ", '$.responseStatus', 'AS', 'responseStatus', 'TEXT'" +
+                                ", '$.timestamp', 'AS', 'timestamp', 'NUMERIC', 'SORTABLE'" +
+                                ", '$.duration', 'AS', 'duration', 'NUMERIC', 'SORTABLE'" +
                                 ")"),
                         List.of(INDEX_NAME, PREFIX)
                 )
@@ -96,7 +98,6 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
     public Flux<Recording> search(RecordingSearch.RecordingSearchCriteria criteria) {
         String query = recordingEntityMapper.criteriaToRedisQuery(criteria);
         Map.Entry<String, String> sort = recordingEntityMapper.criteriaToRedisSort(criteria);
-        logger.info("search, query: \"{}\", sort: \"{}\"", query, sort);
         return redisTemplate.execute(
                         RedisScript.of("return redis.call('FT.search', KEYS[1], KEYS[2], 'SORTBY', KEYS[3], KEYS[4], 'LIMIT', KEYS[5], KEYS[6])", List.class),
                         List.of(INDEX_NAME, query, sort.getKey(), sort.getValue(),

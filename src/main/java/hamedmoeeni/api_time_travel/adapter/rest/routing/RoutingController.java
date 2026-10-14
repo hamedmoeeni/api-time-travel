@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("${att.management.uri-path}/routes")
-public class RoutingController {
+class RoutingController {
     private final RoutingManager routingManager;
     private final RouteDtoMapper routeDtoMapper;
 

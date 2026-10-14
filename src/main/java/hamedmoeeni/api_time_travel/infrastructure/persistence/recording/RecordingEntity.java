@@ -6,7 +6,7 @@ import lombok.Data;
 class RecordingEntity {
     private String requestId;
     private String routeId;
-    private String utcTimestamp;
+    private Long timestamp;
     private String url;
     private String method;
     private String requestHeaders;

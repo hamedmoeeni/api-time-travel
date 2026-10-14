@@ -6,29 +6,32 @@ import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
 
+import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @Mapper(componentModel = "spring")
 interface RecordingEntityMapper {
 
 
-    @Named("zonedDataTimeToUtcString")
-    static String zonedDataTimeToUtcString(ZonedDateTime zonedDateTime) {
-        if (zonedDateTime == null) {
-            return null;
-        }
-        return zonedDateTime.withZoneSameInstant(ZoneOffset.UTC).format(DateTimeFormatter.ISO_DATE_TIME);
+    @Named("zonedDataTimeToEpochMilli")
+    static Long zonedDataTimeToUtcString(ZonedDateTime zonedDateTime) {
+        return zonedDateTime == null ? null : zonedDateTime.toInstant().toEpochMilli();
+    }
+
+    @Named("timestampToZonedDateTime")
+    static ZonedDateTime timestampToZonedDateTime(Long timestamp) {
+        return timestamp == null ? null : ZonedDateTime.ofInstant(Instant.ofEpochMilli(timestamp), ZoneOffset.UTC);
     }
 
     /*@Mapping(source = "timestamp", target = "utcTimestamp", qualifiedByName = "zonedDataTimeToUtcString")
     RecordingEntity toRecordingEntity(Recording recording);*/
 
+    @Mapping(source = "timestamp", target = "timestamp", qualifiedByName = "timestampToZonedDateTime")
     Recording fromRecordingEntity(RecordingEntity recordingEntity);
 
-    @Mapping(source = "timestamp", target = "utcTimestamp", qualifiedByName = "zonedDataTimeToUtcString")
+    @Mapping(source = "timestamp", target = "timestamp", qualifiedByName = "zonedDataTimeToEpochMilli")
     RecordingEntityRequestDetails toRequestDetails(Recording recording);
 
     RecordingEntityResponseDetails toResponseDetails(Recording recording);
@@ -37,30 +40,40 @@ interface RecordingEntityMapper {
         StringBuilder builder = new StringBuilder();
         if (criteria != null) {
             if (criteria.getRequestId() != null && !criteria.getRequestId().isBlank()) {
-                builder.append(" @requestId:'").append(criteria.getRequestId()).append("'");
+                builder.append(" ").append("@requestId:'").append(criteria.getRequestId()).append("'");
             }
             if (criteria.getRouteId() != null && !criteria.getRouteId().isBlank()) {
-                builder.append(" @routeId:'").append(criteria.getRouteId()).append("'");
+                builder.append(" ").append("@routeId:'").append(criteria.getRouteId()).append("'");
             }
             if (criteria.getResponseStatus() != null && !criteria.getResponseStatus().isBlank()) {
-                builder.append(" @responseStatus:'").append(criteria.getResponseStatus()).append("'");
+                builder.append(" ").append("@responseStatus:'").append(criteria.getResponseStatus()).append("'");
+            }
+            if (criteria.getFromTimestamp() != null || criteria.getToTimestamp() != null) {
+                builder.append(" ").append("@timestamp:[")
+                        .append(criteria.getFromTimestamp() == null ? "-inf" : criteria.getFromTimestamp())
+                        .append(" ")
+                        .append(criteria.getToTimestamp() == null ? "+inf" : criteria.getToTimestamp())
+                        .append("]");
             }
         }
         return builder.isEmpty() ? "*" : builder.toString().trim();
     }
 
     default Map.Entry<String, String> criteriaToRedisSort(RecordingSearch.RecordingSearchCriteria criteria) {
-        if (criteria != null) {
-            if (criteria.getOrderByRequestId() != null) {
-                return Map.entry("requestId", criteria.getOrderByRequestId() > 0 ? "ASC" : "DESC");
-            }
-            if (criteria.getOrderByRouteId() != null) {
-                return Map.entry("routeId", criteria.getOrderByRouteId() > 0 ? "ASC" : "DESC");
-            }
-            if (criteria.getOrderByResponseStatus() != null) {
-                return Map.entry("responseStatus", criteria.getOrderByResponseStatus() > 0 ? "ASC" : "DESC");
+        String sort = "timestamp";
+        String direction = "DESC";
+        if (criteria != null && criteria.getSortBy() != null) {
+            if (criteria.getSortBy().equalsIgnoreCase("requestId")) {
+                sort = "requestId";
+            } else if (criteria.getSortBy().equalsIgnoreCase("duration")) {
+                sort = "duration";
             }
         }
-        return Map.entry("requestId", "DESC");
+
+        if (criteria != null && criteria.getSortOrder() != null && criteria.getSortOrder().equalsIgnoreCase("asc")) {
+            direction = "ASC";
+        }
+
+        return Map.entry(sort, direction);
     }
 }
