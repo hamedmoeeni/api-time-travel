@@ -6,10 +6,10 @@ import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
 @Service
-class RecordingSearchImpl implements RecordingSearch {
+class RecordingSearchServiceImpl implements RecordingSearchService {
     private final RecordingPersistence recordingPersistence;
 
-    RecordingSearchImpl(RecordingPersistence recordingPersistence) {
+    RecordingSearchServiceImpl(RecordingPersistence recordingPersistence) {
         this.recordingPersistence = recordingPersistence;
     }
 

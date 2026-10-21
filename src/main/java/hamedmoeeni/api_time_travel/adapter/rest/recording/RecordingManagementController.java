@@ -1,7 +1,7 @@
 package hamedmoeeni.api_time_travel.adapter.rest.recording;
 
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingManager;
-import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearch;
+import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -10,13 +10,13 @@ import reactor.core.publisher.Mono;
 @RequestMapping("${att.management.uri-path}/recording")
 class RecordingManagementController {
     private final RecordingManager recordingManager;
-    private final RecordingSearch recordingSearch;
+    private final RecordingSearchService recordingSearchService;
     private final CriteriaDtoMapper criteriaDtoMapper;
     private final RecordingDtoMapper recordingDtoMapper;
 
-    public RecordingManagementController(RecordingManager recordingManager, RecordingSearch recordingSearch, CriteriaDtoMapper criteriaDtoMapper, RecordingDtoMapper recordingDtoMapper) {
+    public RecordingManagementController(RecordingManager recordingManager, RecordingSearchService recordingSearchService, CriteriaDtoMapper criteriaDtoMapper, RecordingDtoMapper recordingDtoMapper) {
         this.recordingManager = recordingManager;
-        this.recordingSearch = recordingSearch;
+        this.recordingSearchService = recordingSearchService;
         this.criteriaDtoMapper = criteriaDtoMapper;
         this.recordingDtoMapper = recordingDtoMapper;
     }
@@ -33,7 +33,7 @@ class RecordingManagementController {
 
     @GetMapping
     public Flux<RecordingDto> search(CriteriaDto criteriaDto) {
-        return recordingSearch.search(criteriaDtoMapper.fromCriteriaDto(criteriaDto))
+        return recordingSearchService.search(criteriaDtoMapper.fromCriteriaDto(criteriaDto))
                 .map(recordingDtoMapper::toRecordingDto);
     }
 }

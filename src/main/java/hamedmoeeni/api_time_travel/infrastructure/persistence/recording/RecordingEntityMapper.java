@@ -1,7 +1,7 @@
 package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
-import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearch;
+import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import org.mapstruct.Mapper;
 import org.mapstruct.Mapping;
 import org.mapstruct.Named;
@@ -36,7 +36,7 @@ interface RecordingEntityMapper {
 
     RecordingEntityResponseDetails toResponseDetails(Recording recording);
 
-    default String criteriaToRedisQuery(RecordingSearch.RecordingSearchCriteria criteria) {
+    default String criteriaToRedisQuery(RecordingSearchService.RecordingSearchCriteria criteria) {
         StringBuilder builder = new StringBuilder();
         if (criteria != null) {
             if (criteria.getRequestId() != null && !criteria.getRequestId().isBlank()) {
@@ -59,7 +59,7 @@ interface RecordingEntityMapper {
         return builder.isEmpty() ? "*" : builder.toString().trim();
     }
 
-    default Map.Entry<String, String> criteriaToRedisSort(RecordingSearch.RecordingSearchCriteria criteria) {
+    default Map.Entry<String, String> criteriaToRedisSort(RecordingSearchService.RecordingSearchCriteria criteria) {
         String sort = "timestamp";
         String direction = "DESC";
         if (criteria != null && criteria.getSortBy() != null) {

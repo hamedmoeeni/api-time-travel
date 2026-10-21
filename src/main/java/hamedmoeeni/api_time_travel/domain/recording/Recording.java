@@ -5,7 +5,8 @@ import lombok.Data;
 import java.time.ZonedDateTime;
 
 @Data
-public class Recording {
+public class Recording implements Cloneable{
+    private Type type;
     private String requestId;
     private String routeId;
     private ZonedDateTime timestamp;
@@ -17,4 +18,14 @@ public class Recording {
     private String responseStatus;
     private String responseHeaders;
     private String responseBody;
+
+    public enum Type{
+        REQUEST,
+        RESPONSE
+    }
+
+    @Override
+    public Recording clone() throws CloneNotSupportedException {
+        return (Recording) super.clone();
+    }
 }

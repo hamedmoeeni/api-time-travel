@@ -3,10 +3,14 @@ package hamedmoeeni.api_time_travel.infrastructure.gateway.filter;
 import hamedmoeeni.api_time_travel.adapter.collector.recording.port.RecordingDataCollectorInfrastructure;
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
 import org.reactivestreams.Publisher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.core.Ordered;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.core.io.buffer.DataBufferFactory;
@@ -27,14 +31,17 @@ import java.time.ZonedDateTime;
 
 @Component
 class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataCollectorInfrastructure {
-    private static final String ATTRIBUTE_TIMESTAMP = "TIMESTAMP";
+    private static final String ATTRIBUTE_REQUEST_RECORDING = "REQUEST_RECORDING";
+    private final Logger logger = LoggerFactory.getLogger(RecordingGatewayFilter.class);
     private final ApplicationEventPublisher applicationEventPublisher;
+    private final ApplicationContext applicationContext;
 
     private boolean storeBodies = false;
     private boolean bypassed = false;
 
-    RecordingGatewayFilter(ApplicationEventPublisher applicationEventPublisher) {
+    RecordingGatewayFilter(ApplicationEventPublisher applicationEventPublisher, ApplicationContext applicationContext) {
         this.applicationEventPublisher = applicationEventPublisher;
+        this.applicationContext = applicationContext;
     }
 
 
@@ -133,7 +140,6 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
     private void storeRequestDetails(ServerWebExchange exchange, String bodyStr) {
         //Store timestamp on exchange, it will be used to calculate duration when response is ready
         ZonedDateTime now = ZonedDateTime.now();
-        exchange.getAttributes().put(ATTRIBUTE_TIMESTAMP, now);
         //Ids
         String requestId = exchange.getAttribute(ServerWebExchange.LOG_ID_ATTRIBUTE);
         String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_MATCHED_PATH_ROUTE_ID_ATTR);
@@ -142,17 +148,19 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
         String url = request.getURI().toString();
         String method = request.getMethod().toString();
         String headers = request.getHeaders().toString();
+        //
+        Recording recording = new Recording()
+                .setType(Recording.Type.REQUEST)
+                .setRequestId(requestId)
+                .setRouteId(routeId)
+                .setTimestamp(now)
+                .setUrl(url)
+                .setMethod(method)
+                .setRequestHeaders(headers)
+                .setRequestBody(bodyStr);
+        exchange.getAttributes().put(ATTRIBUTE_REQUEST_RECORDING, recording);
         //Event
-        this.applicationEventPublisher.publishEvent(
-                new Recording()
-                        .setRequestId(requestId)
-                        .setRouteId(routeId)
-                        .setTimestamp(now)
-                        .setUrl(url)
-                        .setMethod(method)
-                        .setRequestHeaders(headers)
-                        .setRequestBody(bodyStr)
-        );
+        this.applicationEventPublisher.publishEvent(recording);
     }
 
     private void storeResponseDetails(ServerWebExchange exchange, ServerHttpResponse response) {
@@ -160,26 +168,30 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
     }
 
     private void storeResponseDetails(ServerWebExchange exchange, ServerHttpResponse response, String bodyStr) {
-        //Id
-        String requestId = exchange.getAttribute(ServerWebExchange.LOG_ID_ATTRIBUTE);
         //Response details
         String status = response.getStatusCode() == null ? null : response.getStatusCode().toString();
         String headers = response.getHeaders().toString();
         //Duration
-        long duration = 0;
-        Object requestTimeStamp = exchange.getAttribute(ATTRIBUTE_TIMESTAMP);
-        if (requestTimeStamp instanceof ZonedDateTime) {
-            duration = Duration.between((ZonedDateTime) requestTimeStamp, ZonedDateTime.now()).toMillis();
+        Object requestRecordingObject = exchange.getAttribute(ATTRIBUTE_REQUEST_RECORDING);
+        if (requestRecordingObject instanceof Recording requestRecording) {
+            //Event
+            try {
+                this.applicationEventPublisher.publishEvent(
+                        requestRecording.clone()
+                                .setType(Recording.Type.RESPONSE)
+                                .setDuration(Duration.between(requestRecording.getTimestamp(), ZonedDateTime.now()).toMillis())
+                                .setResponseStatus(status)
+                                .setResponseHeaders(headers)
+                                .setResponseBody(bodyStr)
+                );
+            } catch (CloneNotSupportedException e) {
+                logger.error("Shutting down because could not clone request recording", e);
+                ((ConfigurableApplicationContext)applicationContext).close();
+            }
+        }else {
+            logger.error("Shutting down because exchange doesn't contain request recording");
+            ((ConfigurableApplicationContext)applicationContext).close();
         }
-        //Event
-        this.applicationEventPublisher.publishEvent(
-                new Recording()
-                        .setRequestId(requestId)
-                        .setDuration(duration)
-                        .setResponseStatus(status)
-                        .setResponseHeaders(headers)
-                        .setResponseBody(bodyStr)
-        );
     }
 
 }

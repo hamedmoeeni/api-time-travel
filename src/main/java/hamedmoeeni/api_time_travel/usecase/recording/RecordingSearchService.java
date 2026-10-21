@@ -4,7 +4,7 @@ import hamedmoeeni.api_time_travel.domain.recording.Recording;
 import lombok.Data;
 import reactor.core.publisher.Flux;
 
-public interface RecordingSearch {
+public interface RecordingSearchService {
     Flux<Recording> search(RecordingSearchCriteria criteria);
 
     @Data

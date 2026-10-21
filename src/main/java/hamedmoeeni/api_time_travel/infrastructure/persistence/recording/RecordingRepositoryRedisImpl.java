@@ -2,7 +2,7 @@ package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.adapter.persistence.recording.port.RecordingRepository;
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
-import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearch;
+import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,7 +95,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
     }
 
     @Override
-    public Flux<Recording> search(RecordingSearch.RecordingSearchCriteria criteria) {
+    public Flux<Recording> search(RecordingSearchService.RecordingSearchCriteria criteria) {
         String query = recordingEntityMapper.criteriaToRedisQuery(criteria);
         Map.Entry<String, String> sort = recordingEntityMapper.criteriaToRedisSort(criteria);
         return redisTemplate.execute(

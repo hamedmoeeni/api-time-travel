@@ -1,7 +1,7 @@
 package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
-import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearch;
+import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -79,7 +79,7 @@ public class RecordingRepositoryRedisITest {
 
         //All entities with sort
         recordingRepositoryRedis.search(
-                        new RecordingSearch.RecordingSearchCriteria()
+                        new RecordingSearchService.RecordingSearchCriteria()
                                 .setRouteId(recording1.getRouteId())
                                 .setSortBy("requestId").setSortOrder("asc")
                 )
@@ -99,7 +99,7 @@ public class RecordingRepositoryRedisITest {
 
         //Page size
         recordingRepositoryRedis.search(
-                        new RecordingSearch.RecordingSearchCriteria()
+                        new RecordingSearchService.RecordingSearchCriteria()
                                 .setRouteId(recording1.getRouteId())
                                 .setSortBy("requestId").setSortOrder("asc")
                                 .setPageSize(1)
@@ -111,7 +111,7 @@ public class RecordingRepositoryRedisITest {
 
         //Some entities
         recordingRepositoryRedis.search(
-                        new RecordingSearch.RecordingSearchCriteria()
+                        new RecordingSearchService.RecordingSearchCriteria()
                                 .setRequestId(recording1.getRequestId())
                 )
                 .collectList()
@@ -127,7 +127,7 @@ public class RecordingRepositoryRedisITest {
 
         //No criteria
         recordingRepositoryRedis.search(
-                        new RecordingSearch.RecordingSearchCriteria()
+                        new RecordingSearchService.RecordingSearchCriteria()
                 )
                 .collectList()
                 .doOnSuccess(result -> assertThat(result, Matchers.iterableWithSize(2)))
@@ -135,7 +135,7 @@ public class RecordingRepositoryRedisITest {
 
         //Timestamp range
         recordingRepositoryRedis.search(
-                        new RecordingSearch.RecordingSearchCriteria()
+                        new RecordingSearchService.RecordingSearchCriteria()
                                 .setFromTimestamp(recording1.getTimestamp().toInstant().toEpochMilli())
                                 .setToTimestamp(recording2.getTimestamp().toInstant().toEpochMilli())
                 )
