@@ -15,7 +15,7 @@ public class Recording implements Cloneable{
     private String requestHeaders;
     private String requestBody;
     private Long duration;
-    private String responseStatus;
+    private Integer responseStatus;
     private String responseHeaders;
     private String responseBody;
 

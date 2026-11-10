@@ -7,12 +7,13 @@ import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
 import org.springframework.stereotype.Repository;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -52,10 +53,10 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
         redisTemplate.execute(
                         RedisScript.of("redis.call(" +
                                 "'FT.create', KEYS[1], 'ON', 'JSON', 'PREFIX', 1, KEYS[2], 'SCHEMA'" +
-                                ", '$.requestId', 'AS', 'requestId', 'TEXT'" +
-                                ", '$.routeId', 'AS', 'routeId', 'TEXT'" +
-                                ", '$.method', 'AS', 'method', 'TEXT'" +
-                                ", '$.responseStatus', 'AS', 'responseStatus', 'TEXT'" +
+                                ", '$.requestId', 'AS', 'requestId', 'TAG'" +
+                                ", '$.routeId', 'AS', 'routeId', 'TAG'" +
+                                ", '$.method', 'AS', 'method', 'TAG'" +
+                                ", '$.responseStatus', 'AS', 'responseStatus', 'NUMERIC', 'SORTABLE'" +
                                 ", '$.timestamp', 'AS', 'timestamp', 'NUMERIC', 'SORTABLE'" +
                                 ", '$.duration', 'AS', 'duration', 'NUMERIC', 'SORTABLE'" +
                                 ")"),
@@ -95,15 +96,18 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
     }
 
     @Override
-    public Flux<Recording> search(RecordingSearchService.RecordingSearchCriteria criteria) {
+    public Mono<Page<Recording>> search(RecordingSearchService.RecordingSearchCriteria criteria) {
         String query = recordingEntityMapper.criteriaToRedisQuery(criteria);
         Map.Entry<String, String> sort = recordingEntityMapper.criteriaToRedisSort(criteria);
         return redisTemplate.execute(
                         RedisScript.of("return redis.call('FT.search', KEYS[1], KEYS[2], 'SORTBY', KEYS[3], KEYS[4], 'LIMIT', KEYS[5], KEYS[6])", List.class),
                         List.of(INDEX_NAME, query, sort.getKey(), sort.getValue(),
-                                Long.toString(criteria.getPageStart()), Long.toString(criteria.getPageSize()))
+                                Long.toString(criteria.getPageNumber() * criteria.getPageSize()), Long.toString(criteria.getPageSize()))
                 )
-                .flatMap(r -> Flux.fromIterable(deserializeSearchResult(r, serializer)))
-                .map(recordingEntityMapper::fromRecordingEntity);
+                .collectList()
+                .map(r -> {
+                    Page<RecordingEntity> page = deserializeSearchResult(r, serializer, PageRequest.of((int) criteria.getPageNumber(), (int) criteria.getPageSize()));
+                    return page.map(recordingEntityMapper::fromRecordingEntity);
+                });
     }
 }

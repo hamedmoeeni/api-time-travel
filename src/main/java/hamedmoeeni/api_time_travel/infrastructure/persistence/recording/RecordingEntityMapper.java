@@ -28,6 +28,35 @@ interface RecordingEntityMapper {
     /*@Mapping(source = "timestamp", target = "utcTimestamp", qualifiedByName = "zonedDataTimeToUtcString")
     RecordingEntity toRecordingEntity(Recording recording);*/
 
+    private void createOrQuery(StringBuilder stringBuilder, String fieldName, String[] values) {
+        if (values != null && values.length > 0) {
+            stringBuilder.append(" ").append("@").append(fieldName).append(":{");
+            for (String value : values) {
+                stringBuilder.append("'")
+                        .append(value
+                                .replaceAll("-", "\\\\-")
+                                .replaceAll("@", "\\\\@")
+                        ).append("'").append("|");
+            }
+            if (stringBuilder.charAt(stringBuilder.length() - 1) == '|') {
+                stringBuilder.deleteCharAt(stringBuilder.length() - 1);
+            }
+            stringBuilder.append("}");
+        }
+    }
+
+    private void createOrQuery(StringBuilder stringBuilder, @SuppressWarnings("SameParameterValue") String fieldName, Integer[] values) {
+        if (values != null && values.length > 0) {
+            stringBuilder.append(" ").append("@").append(fieldName).append(":[");
+            if (values.length == 1) {
+                stringBuilder.append(values[0]).append(" ").append(values[0]);
+            } else if (values.length == 2) {
+                stringBuilder.append(values[0]).append(" ").append(values[1]);
+            }
+            stringBuilder.append("]");
+        }
+    }
+
     @Mapping(source = "timestamp", target = "timestamp", qualifiedByName = "timestampToZonedDateTime")
     Recording fromRecordingEntity(RecordingEntity recordingEntity);
 
@@ -39,15 +68,10 @@ interface RecordingEntityMapper {
     default String criteriaToRedisQuery(RecordingSearchService.RecordingSearchCriteria criteria) {
         StringBuilder builder = new StringBuilder();
         if (criteria != null) {
-            if (criteria.getRequestId() != null && !criteria.getRequestId().isBlank()) {
-                builder.append(" ").append("@requestId:'").append(criteria.getRequestId()).append("'");
-            }
-            if (criteria.getRouteId() != null && !criteria.getRouteId().isBlank()) {
-                builder.append(" ").append("@routeId:'").append(criteria.getRouteId()).append("'");
-            }
-            if (criteria.getResponseStatus() != null && !criteria.getResponseStatus().isBlank()) {
-                builder.append(" ").append("@responseStatus:'").append(criteria.getResponseStatus()).append("'");
-            }
+            createOrQuery(builder, "requestId", criteria.getRequestId());
+            createOrQuery(builder, "routeId", criteria.getRouteId());
+            createOrQuery(builder, "responseStatus", criteria.getResponseStatus());
+            createOrQuery(builder, "method", criteria.getMethod());
             if (criteria.getFromTimestamp() != null || criteria.getToTimestamp() != null) {
                 builder.append(" ").append("@timestamp:[")
                         .append(criteria.getFromTimestamp() == null ? "-inf" : criteria.getFromTimestamp())
@@ -56,7 +80,7 @@ interface RecordingEntityMapper {
                         .append("]");
             }
         }
-        return builder.isEmpty() ? "*" : builder.toString().trim();
+        return builder.isEmpty() ? "*" : builder.insert(0, "'").append("'").toString().trim();
     }
 
     default Map.Entry<String, String> criteriaToRedisSort(RecordingSearchService.RecordingSearchCriteria criteria) {

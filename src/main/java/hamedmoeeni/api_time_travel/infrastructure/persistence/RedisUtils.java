@@ -1,5 +1,8 @@
 package hamedmoeeni.api_time_travel.infrastructure.persistence;
 
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveRedisTemplate;
 import org.springframework.data.redis.serializer.JacksonJsonRedisSerializer;
@@ -40,17 +43,28 @@ public class RedisUtils {
         return new ReactiveRedisTemplate<>(connectionFactory, serializationContext);
     }
 
-    public static <T> Iterable<T> deserializeSearchResult(Iterable<?> rawResult, RedisSerializer<T> serializer) {
+    public static <T> Page<T> deserializeSearchResult(Iterable<?> rawResult, RedisSerializer<T> serializer, Pageable pageable) {
         List<T> result = new LinkedList<>();
-        rawResult.forEach(o -> {
-            if (o instanceof List) {
-                ((Iterable<?>) o).forEach(e -> {
-                    if (e instanceof String && ((String) e).startsWith("{")) {
-                        result.add(serializer.deserialize(((String) e).getBytes()));
+        Long[] total = new Long[1];
+        rawResult.forEach(l1 -> {
+            if (l1 instanceof List) {
+                ((Iterable<?>) l1).forEach(l2 -> {
+                    //First item is the total number of elements
+                    if (total[0] == null) {
+                        if (l2 instanceof Long) {
+                            total[0] = (Long) l2;
+                        }
+                    }
+                    if (l2 instanceof List) {
+                        ((Iterable<?>) l2).forEach(l3 -> {
+                            if (l3 instanceof String && ((String) l3).startsWith("{")) {
+                                result.add(serializer.deserialize(((String) l3).getBytes()));
+                            }
+                        });
                     }
                 });
             }
         });
-        return result;
+        return new PageImpl<>(result, pageable, total[0]);
     }
 }

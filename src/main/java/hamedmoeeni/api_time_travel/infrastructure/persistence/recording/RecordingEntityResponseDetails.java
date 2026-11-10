@@ -6,7 +6,7 @@ import lombok.Data;
 class RecordingEntityResponseDetails {
     private String requestId;
     private Long duration;
-    private String responseStatus;
+    private Integer responseStatus;
     private String responseHeaders;
     private String responseBody;
 }

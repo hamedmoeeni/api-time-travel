@@ -2,7 +2,7 @@ package hamedmoeeni.api_time_travel.adapter.persistence.recording.port;
 
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
-import reactor.core.publisher.Flux;
+import org.springframework.data.domain.Page;
 import reactor.core.publisher.Mono;
 
 public interface RecordingRepository {
@@ -10,5 +10,5 @@ public interface RecordingRepository {
 
     Mono<Boolean> upsertIgnoreRequest(Recording recording);
 
-    Flux<Recording> search(RecordingSearchService.RecordingSearchCriteria criteria);
+    Mono<Page<Recording>> search(RecordingSearchService.RecordingSearchCriteria criteria);
 }

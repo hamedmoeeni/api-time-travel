@@ -1,9 +1,12 @@
 package hamedmoeeni.api_time_travel.adapter.rest.recording;
 
+import hamedmoeeni.api_time_travel.usecase.Page;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingManager;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
-import org.springframework.web.bind.annotation.*;
-import reactor.core.publisher.Flux;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
 
 @RestController
@@ -32,8 +35,8 @@ class RecordingManagementController {
     }
 
     @GetMapping
-    public Flux<RecordingDto> search(CriteriaDto criteriaDto) {
+    public Mono<Page<RecordingDto>> search(CriteriaDto criteriaDto) {
         return recordingSearchService.search(criteriaDtoMapper.fromCriteriaDto(criteriaDto))
-                .map(recordingDtoMapper::toRecordingDto);
+                .map(recordingPage -> recordingPage.map(recordingDtoMapper::toRecordingDto));
     }
 }

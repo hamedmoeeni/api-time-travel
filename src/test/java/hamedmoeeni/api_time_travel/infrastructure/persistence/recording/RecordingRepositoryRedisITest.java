@@ -40,7 +40,7 @@ public class RecordingRepositoryRedisITest {
                 .setUrl("http://myHost/myPath1")
                 .setMethod("testMethod1")
                 .setDuration(1L)
-                .setResponseStatus("testStatus1")
+                .setResponseStatus(200)
                 .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli()),ZoneOffset.UTC));
 
         Recording recording2 = new Recording()
@@ -80,10 +80,9 @@ public class RecordingRepositoryRedisITest {
         //All entities with sort
         recordingRepositoryRedis.search(
                         new RecordingSearchService.RecordingSearchCriteria()
-                                .setRouteId(recording1.getRouteId())
+                                .setRouteId(new String[]{recording1.getRouteId()})
                                 .setSortBy("requestId").setSortOrder("asc")
                 )
-                .collectList()
                 .doOnSuccess(result -> {
                     assertThat(result, Matchers.iterableWithSize(2));
 
@@ -100,11 +99,10 @@ public class RecordingRepositoryRedisITest {
         //Page size
         recordingRepositoryRedis.search(
                         new RecordingSearchService.RecordingSearchCriteria()
-                                .setRouteId(recording1.getRouteId())
+                                .setRouteId(new String[]{recording1.getRouteId()})
                                 .setSortBy("requestId").setSortOrder("asc")
                                 .setPageSize(1)
                 )
-                .collectList()
                 .doOnSuccess(result -> assertThat(result, Matchers.iterableWithSize(1)))
                 .block();
 
@@ -112,9 +110,8 @@ public class RecordingRepositoryRedisITest {
         //Some entities
         recordingRepositoryRedis.search(
                         new RecordingSearchService.RecordingSearchCriteria()
-                                .setRequestId(recording1.getRequestId())
+                                .setRequestId(new String[]{recording1.getRequestId()})
                 )
-                .collectList()
                 .doOnSuccess(result -> {
                     assertThat(result, Matchers.iterableWithSize(1));
 
@@ -129,7 +126,6 @@ public class RecordingRepositoryRedisITest {
         recordingRepositoryRedis.search(
                         new RecordingSearchService.RecordingSearchCriteria()
                 )
-                .collectList()
                 .doOnSuccess(result -> assertThat(result, Matchers.iterableWithSize(2)))
                 .block();
 
@@ -139,7 +135,6 @@ public class RecordingRepositoryRedisITest {
                                 .setFromTimestamp(recording1.getTimestamp().toInstant().toEpochMilli())
                                 .setToTimestamp(recording2.getTimestamp().toInstant().toEpochMilli())
                 )
-                .collectList()
                 .doOnSuccess(result -> assertThat(result, Matchers.iterableWithSize(2)))
                 .block();
     }

@@ -169,7 +169,7 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
 
     private void storeResponseDetails(ServerWebExchange exchange, ServerHttpResponse response, String bodyStr) {
         //Response details
-        String status = response.getStatusCode() == null ? null : response.getStatusCode().toString();
+        int status = response.getStatusCode() == null ? 0 : response.getStatusCode().value();
         String headers = response.getHeaders().toString();
         //Duration
         Object requestRecordingObject = exchange.getAttribute(ATTRIBUTE_REQUEST_RECORDING);
@@ -186,11 +186,11 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
                 );
             } catch (CloneNotSupportedException e) {
                 logger.error("Shutting down because could not clone request recording", e);
-                ((ConfigurableApplicationContext)applicationContext).close();
+                ((ConfigurableApplicationContext) applicationContext).close();
             }
-        }else {
+        } else {
             logger.error("Shutting down because exchange doesn't contain request recording");
-            ((ConfigurableApplicationContext)applicationContext).close();
+            ((ConfigurableApplicationContext) applicationContext).close();
         }
     }
 

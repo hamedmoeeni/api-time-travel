@@ -6,8 +6,8 @@ import hamedmoeeni.api_time_travel.domain.recording.Recording;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingStatsService;
 import hamedmoeeni.api_time_travel.usecase.recording.port.RecordingPersistence;
+import org.springframework.data.domain.Page;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -35,7 +35,7 @@ class RecordingPersistenceImpl implements RecordingPersistence {
     }
 
     @Override
-    public Flux<Recording> search(RecordingSearchService.RecordingSearchCriteria criteria) {
+    public Mono<Page<Recording>> search(RecordingSearchService.RecordingSearchCriteria criteria) {
         return this.recordingRepository.search(criteria);
     }
 

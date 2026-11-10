@@ -103,7 +103,7 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
                                     ", 'DUPLICATE_POLICY', 'SUM'" +
                                     ", 'labels', 'type', 'response', 'method', KEYS[2], 'url', KEYS[3], 'status', KEYS[4], 'routeId', KEYS[5]" +
                                     ")"),
-                            List.of(timeSeriesName, recording.getMethod(), escapeUrl(recording.getUrl()), recording.getResponseStatus(), recording.getRouteId()))
+                            List.of(timeSeriesName, recording.getMethod(), escapeUrl(recording.getUrl()), String.valueOf(recording.getResponseStatus()), recording.getRouteId()))
                     .collectList()
                     .map(_ -> {
                         createdTimeSeries.add(timeSeriesName);
