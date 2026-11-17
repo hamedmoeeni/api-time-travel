@@ -3,22 +3,25 @@ package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingStatsService;
 import org.hamcrest.Matchers;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Execution;
+import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 
-import java.time.Instant;
+import java.text.DecimalFormat;
+import java.time.LocalDateTime;
 import java.time.ZoneOffset;
-import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 
 @Profile("infrastructure-test")
+@Execution(ExecutionMode.SAME_THREAD)
 @SpringBootTest
 public class RecordingTimeSeriesRepositoryRedisITest {
     @Autowired
@@ -26,250 +29,215 @@ public class RecordingTimeSeriesRepositoryRedisITest {
     @Autowired
     private ReactiveRedisConnectionFactory redisConnectionFactory;
 
-    @BeforeEach
+    @AfterEach
     public void setUp() {
-        redisConnectionFactory.getReactiveConnection().serverCommands().flushAll().block();
+        redisConnectionFactory.getReactiveConnection().serverCommands().flushDb().block();
     }
 
-    @Order(1)
+    private void saveRequest(String requestId, String routeId, String url, String method, String timestamp) {
+        Recording recording = new Recording()
+                .setRequestId(requestId).setRouteId(routeId).setUrl(url).setMethod(method)
+                .setTimestamp(LocalDateTime.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(ZoneOffset.UTC));
+        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording).block();
+    }
+
+    private void saveResponse(String requestId, String routeId, String url, String method, String timestamp, Integer httpStatus, Long duration) {
+        Recording recording = new Recording()
+                .setRequestId(requestId).setRouteId(routeId).setUrl(url).setMethod(method)
+                .setTimestamp(LocalDateTime.parse(timestamp, DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(ZoneOffset.UTC))
+                .setResponseStatus(httpStatus).setDuration(duration);
+        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording).block();
+    }
+
     @Test
-    public void saveRequest() {
-        Recording recording1 = new Recording()
-                .setRequestId("requestId-1")
-                .setRouteId("routeId-1")
-                .setUrl("http://anyhost/path1")
-                .setMethod("method-1")
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now().toInstant().toEpochMilli()), ZoneOffset.UTC));
-
-        Recording recording2 = new Recording()
-                .setRequestId("requestId-2")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod(recording1.getMethod())
-                .setTimestamp(recording1.getTimestamp());
-
-        Recording recording3 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod(recording1.getMethod())
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        Recording recording4 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod("method-2")
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording1).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording2).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording3).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording4).block();
+    public void queryLabelsFromRequest() {
+        saveRequest("requestId-1", "routeId-1", "http://test/path-1", "GET", "2000-01-01 00:00:00");
+        saveRequest("requestId-2", "routeId-1", "http://test/path-1", "GET", "2000-01-01 00:00:00");
+        saveRequest("requestId-3", "routeId-2", "http://test/path-2", "GET", "2000-01-01 00:00:01");
+        saveRequest("requestId-3", "routeId-1", "http://test/path-1", "POST", "2000-01-01 00:00:02");
 
         RecordingStatsService.QueryLabels queryLabels = recordingTimeSeriesRepositoryRedis.getQueryLabels().block();
 
         assertThat(queryLabels, Matchers.notNullValue());
-        assertThat(queryLabels.getMethods(), Matchers.contains("method-1", "method-2"));
-        assertThat(queryLabels.getUrls(), Matchers.contains("http://anyhost/path1"));
-        assertThat(queryLabels.getRouteIds(), Matchers.contains("routeId-1"));
+        assertThat(queryLabels.getMethods(), Matchers.contains("GET", "POST"));
+        assertThat(queryLabels.getUrls(), Matchers.contains("http://test/path-1", "http://test/path-2"));
+        assertThat(queryLabels.getRouteIds(), Matchers.contains("routeId-1", "routeId-2"));
         assertThat(queryLabels.getStatus(), Matchers.empty());
     }
 
-    @Order(2)
     @Test
-    public void saveResponse() {
-        Recording recording1 = new Recording()
-                .setRequestId("requestId-1")
-                .setRouteId("routeId-1")
-                .setUrl("http://anyhost/path1")
-                .setMethod("method-1")
-                .setResponseStatus("status-1")
-                .setDuration(5L)
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now().toInstant().toEpochMilli()), ZoneOffset.UTC));
-
-        Recording recording2 = new Recording()
-                .setRequestId("requestId-2")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod(recording1.getMethod())
-                .setResponseStatus(recording1.getResponseStatus())
-                .setDuration(6L)
-                .setTimestamp(recording1.getTimestamp());
-
-        Recording recording3 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod(recording1.getMethod())
-                .setResponseStatus(recording2.getResponseStatus())
-                .setDuration(7L)
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording1).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording2).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording3).block();
+    public void queryLabelsFromResponse() {
+        saveResponse("requestId-1", "routeId-1", "http://test/path-1", "GET", "2000-01-01 00:00:00", 200, 5L);
+        saveResponse("requestId-2", "routeId-1", "http://test/path-1", "POST", "2000-01-01 00:00:00", 200, 6L);
+        saveResponse("requestId-3", "routeId-1", "http://test/path-2", "GET", "2000-01-01 00:00:01", 301, 7L);
 
         RecordingStatsService.QueryLabels queryLabels = recordingTimeSeriesRepositoryRedis.getQueryLabels().block();
 
         assertThat(queryLabels, Matchers.notNullValue());
-        assertThat(queryLabels.getMethods(), Matchers.contains("method-1"));
-        assertThat(queryLabels.getUrls(), Matchers.contains("http://anyhost/path1"));
+        assertThat(queryLabels.getMethods(), Matchers.contains("GET", "POST"));
+        assertThat(queryLabels.getUrls(), Matchers.contains("http://test/path-1", "http://test/path-2"));
         assertThat(queryLabels.getRouteIds(), Matchers.contains("routeId-1"));
-        assertThat(queryLabels.getStatus(), Matchers.contains("status-1"));
+        assertThat(queryLabels.getStatus(), Matchers.contains("200", "301"));
     }
 
-    @Order(3)
     @Test
     public void queryCounts() {
-        Recording recording1 = new Recording()
-                .setRequestId("requestId-1")
-                .setRouteId("routeId-1")
-                .setUrl("http://anyhost/path1")
-                .setMethod("get")
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now().toInstant().toEpochMilli()), ZoneOffset.UTC));
+        /*
+         * 1 req/s for 1 minute
+         * all have same routeId
+         * even seconds have GET method, odd seconds have POST method
+         * every 10 second Urls alternate
+         * every 30 seconds http status code alternates
+         */
+        for (int i = 0; i < 60; i++) {
+            String timestamp = "2000-01-01 00:00:" + new DecimalFormat("00").format(i);
+            String requestId = "requestId-" + i;
+            String routeId = "routeId-1";
+            String method = i % 2 == 0 ? "GET" : "POST";
+            String url = (i / 10) % 2 == 0 ? "http://test/path1" : "http://test/path2";
+            int httpStatus = (i / 30) % 2 == 0 ? 200 : 503;
+            saveRequest(requestId, routeId, url, method, timestamp);
+            saveResponse(requestId, routeId, url, method, timestamp, httpStatus, 5L);
+        }
 
-        Recording recording2 = new Recording()
-                .setRequestId("requestId-2")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod("post")
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
+        /*
+         * No record for 1 minute, then 1 patch request
+         */
+        saveRequest("requestId-last", "routeId-1", "http://test/path1", "PATCH", "2000-01-01 00:02:00");
+        saveResponse("requestId-last", "routeId-1", "http://test/path1", "PATCH", "2000-01-01 00:02:00", 200, 5L);
 
-        Recording recording3 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId("routeId-2")
-                .setUrl("http://anyhost/path2")
-                .setMethod("get")
-                .setTimestamp(recording1.getTimestamp());
-
-        Recording recording4 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId(recording3.getRouteId())
-                .setUrl(recording3.getUrl())
-                .setMethod("post")
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording1).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording2).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording3).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreResponse(recording4).block();
-
+        // Group by routeId
         List<RecordingStatsService.StatsTimeSeries> queryResult = recordingTimeSeriesRepositoryRedis.query(
-                new RecordingStatsService.StatsQuery().setMethods(List.of("get"))
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.COUNT)
+                        .setGroupBy("routeId")
         ).block();
 
         assertThat(queryResult, Matchers.hasSize(1));
-        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("get"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{recording1.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("routeId-1"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{60.0, 1.0}));
 
+        // Group by method
         queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
-                        .setMethods(List.of("get", "post"))
-                        .setRouteIds(List.of("routeId-1", "routeId-2"))
-        ).block();
-
-        assertThat(queryResult, Matchers.hasSize(2));
-        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("get"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{recording1.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
-        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("post"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{recording2.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{2.0}));
-
-        queryResult = recordingTimeSeriesRepositoryRedis.query(
-                new RecordingStatsService.StatsQuery()
-                        .setMethods(List.of("get", "post"))
-                        .setRouteIds(List.of("routeId-1", "routeId-2"))
-                        .setUrls(List.of("http://anyhost/path1", "http://anyhost/path2"))
-        ).block();
-
-        assertThat(queryResult, Matchers.hasSize(2));
-        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("get"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{recording1.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
-        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("post"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{recording2.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{2.0}));
-    }
-
-    @Order(4)
-    @Test
-    public void queryAvg() {
-        Recording recording1 = new Recording()
-                .setRequestId("requestId-1")
-                .setRouteId("routeId-1")
-                .setUrl("http://anyhost/path1")
-                .setMethod("get")
-                .setResponseStatus("200")
-                .setDuration(10L)
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now().toInstant().toEpochMilli()), ZoneOffset.UTC));
-
-        Recording recording2 = new Recording()
-                .setRequestId("requestId-2")
-                .setRouteId(recording1.getRouteId())
-                .setUrl(recording1.getUrl())
-                .setMethod("post")
-                .setResponseStatus("200")
-                .setDuration(20L)
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        Recording recording3 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId("routeId-2")
-                .setUrl("http://anyhost/path2")
-                .setMethod("get")
-                .setResponseStatus("301")
-                .setDuration(1L)
-                .setTimestamp(recording1.getTimestamp());
-
-        Recording recording4 = new Recording()
-                .setRequestId("requestId-3")
-                .setRouteId(recording3.getRouteId())
-                .setUrl(recording3.getUrl())
-                .setMethod("post")
-                .setResponseStatus("301")
-                .setDuration(2L)
-                .setTimestamp(recording1.getTimestamp().plusSeconds(1));
-
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording1).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording2).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording3).block();
-        recordingTimeSeriesRepositoryRedis.saveRecordingIgnoreRqquest(recording4).block();
-
-        List<RecordingStatsService.StatsTimeSeries> queryResult = recordingTimeSeriesRepositoryRedis.query(
-                new RecordingStatsService.StatsQuery()
-                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.COUNT)
                         .setGroupBy("method")
         ).block();
 
-        assertThat(queryResult, Matchers.hasSize(2));
-        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("get"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{recording1.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{5.5}));
-        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("post"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{recording2.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{11.0}));
+        assertThat(queryResult, Matchers.hasSize(3));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("GET"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{30.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("PATCH"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{1.0}));
+        assertThat(queryResult.get(2).getLabel(), Matchers.equalTo("POST"));
+        assertThat(queryResult.get(2).getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.get(2).getValue(), Matchers.equalTo(new Double[]{30.0}));
 
+
+        // Group by url
         queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
-                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
-                        .setMethods(List.of("get,post"))
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.COUNT)
+                        .setGroupBy("url")
+        ).block();
+
+        assertThat(queryResult, Matchers.hasSize(2));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("http://test/path1"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{30.0, 1.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("http://test/path2"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{30.0}));
+
+        // Group by http status code
+        queryResult = recordingTimeSeriesRepositoryRedis.query(
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.COUNT)
                         .setGroupBy("status")
         ).block();
 
         assertThat(queryResult, Matchers.hasSize(2));
         assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("200"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{
-                recording1.getTimestamp().toInstant().toEpochMilli(),
-                recording2.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{10.0, 20.0}));
-        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("301"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{
-                recording3.getTimestamp().toInstant().toEpochMilli(),
-                recording4.getTimestamp().toInstant().toEpochMilli()}));
-        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{1.0, 2.0}));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{30.0, 1.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("503"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{30.0}));
+    }
 
+    @Test
+    public void queryAvg() {
+        /*
+         * In the first minute there are 3 GET requests with average of 2
+         */
+        saveResponse("requestId-1", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:03", 200, 1L);
+        saveResponse("requestId-2", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:20", 200, 2L);
+        saveResponse("requestId-3", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:47", 503, 3L);
+
+        /*
+         * In the third minute, there are 2 POST request with average of 4.5
+         */
+        saveResponse("requestId-4", "routeId-2", "http://test/path2", "POST", "2000-01-01 00:02:00", 200, 4L);
+        saveResponse("requestId-5", "routeId-2", "http://test/path2", "POST", "2000-01-01 00:02:59", 503, 5L);
+
+        // Group by routeId
+        List<RecordingStatsService.StatsTimeSeries> queryResult = recordingTimeSeriesRepositoryRedis.query(
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setGroupBy("routeId")
+        ).block();
+
+        assertThat(queryResult, Matchers.hasSize(2));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("routeId-1"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("routeId-2"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
+
+        // Group by url
+        queryResult = recordingTimeSeriesRepositoryRedis.query(
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setGroupBy("url")
+        ).block();
+        assertThat(queryResult, Matchers.hasSize(2));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("http://test/path1"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("http://test/path2"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
+
+        // Group by http method
+        queryResult = recordingTimeSeriesRepositoryRedis.query(
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setGroupBy("method")
+        ).block();
+        assertThat(queryResult, Matchers.hasSize(2));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("GET"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("POST"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
+
+        // Group by status
+        queryResult = recordingTimeSeriesRepositoryRedis.query(
+                new RecordingStatsService.StatsQuery()
+                        .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setGroupBy("status")
+        ).block();
+        assertThat(queryResult, Matchers.hasSize(2));
+        assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("200"));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{1.5, 4.0}));
+        assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("503"));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{3.0, 5.0}));
     }
 }

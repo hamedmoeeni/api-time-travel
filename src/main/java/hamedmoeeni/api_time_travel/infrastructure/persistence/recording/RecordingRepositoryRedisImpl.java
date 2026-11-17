@@ -2,6 +2,7 @@ package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.adapter.persistence.recording.port.RecordingRepository;
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
+import hamedmoeeni.api_time_travel.infrastructure.config.ATTConfig;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
@@ -29,17 +30,20 @@ import static hamedmoeeni.api_time_travel.infrastructure.persistence.RedisUtils.
         matchIfMissing = true //redis is default persistence repository
 )
 class RecordingRepositoryRedisImpl implements RecordingRepository {
-    private static final String ENTITY_NAME = "RecordingEntity";
-    private static final String INDEX_NAME = ENTITY_NAME + "Idx";
-    private static final String PREFIX = ENTITY_NAME + ":";
     private final Logger logger = LoggerFactory.getLogger(RecordingRepositoryRedisImpl.class);
     private final RecordingEntityMapper recordingEntityMapper;
     private final ReactiveRedisTemplate<String, String> redisTemplate;
     private final JacksonJsonRedisSerializer<RecordingEntity> serializer = new JacksonJsonRedisSerializer<>(RecordingEntity.class);
     private final JacksonJsonRedisSerializer<RecordingEntityRequestDetails> requestDetailsSerializer = new JacksonJsonRedisSerializer<>(RecordingEntityRequestDetails.class);
     private final JacksonJsonRedisSerializer<RecordingEntityResponseDetails> responseDetailsSerializer = new JacksonJsonRedisSerializer<>(RecordingEntityResponseDetails.class);
+    private final String indexName;
+    private final String prefix;
 
-    public RecordingRepositoryRedisImpl(RecordingEntityMapper recordingEntityMapper, ReactiveRedisConnectionFactory connectionFactory) {
+
+    public RecordingRepositoryRedisImpl(ATTConfig attConfig, RecordingEntityMapper recordingEntityMapper, ReactiveRedisConnectionFactory connectionFactory) {
+        String entityName = attConfig.getPersistenceEntitiesPrefix() + ":RecordingEntity";
+        this.indexName = entityName + "Idx";
+        this.prefix = entityName + ":";
         this.recordingEntityMapper = recordingEntityMapper;
         this.redisTemplate = buildRedisStringTemplate(connectionFactory);
     }
@@ -60,7 +64,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
                                 ", '$.timestamp', 'AS', 'timestamp', 'NUMERIC', 'SORTABLE'" +
                                 ", '$.duration', 'AS', 'duration', 'NUMERIC', 'SORTABLE'" +
                                 ")"),
-                        List.of(INDEX_NAME, PREFIX)
+                        List.of(indexName, prefix)
                 )
                 .onErrorComplete(throwable -> {
                     if (throwable.getCause().getMessage().startsWith("Index already exists")) {
@@ -80,7 +84,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
         String json = new String(requestDetailsSerializer.serialize(recordingEntityMapper.toRequestDetails(recording)));
         return redisTemplate.execute(
                         RedisScript.of("redis.call('JSON.merge', KEYS[1], KEYS[2], KEYS[3])"),
-                        List.of(PREFIX + recording.getRequestId(), "$", json))
+                        List.of(prefix + recording.getRequestId(), "$", json))
                 .collectList()
                 .map(_ -> true);
     }
@@ -90,7 +94,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
         String json = new String(responseDetailsSerializer.serialize(recordingEntityMapper.toResponseDetails(recording)));
         return redisTemplate.execute(
                         RedisScript.of("redis.call('JSON.merge', KEYS[1], KEYS[2], KEYS[3])"),
-                        List.of(PREFIX + recording.getRequestId(), "$", json))
+                        List.of(prefix + recording.getRequestId(), "$", json))
                 .collectList()
                 .map(_ -> true);
     }
@@ -101,7 +105,7 @@ class RecordingRepositoryRedisImpl implements RecordingRepository {
         Map.Entry<String, String> sort = recordingEntityMapper.criteriaToRedisSort(criteria);
         return redisTemplate.execute(
                         RedisScript.of("return redis.call('FT.search', KEYS[1], KEYS[2], 'SORTBY', KEYS[3], KEYS[4], 'LIMIT', KEYS[5], KEYS[6])", List.class),
-                        List.of(INDEX_NAME, query, sort.getKey(), sort.getValue(),
+                        List.of(indexName, query, sort.getKey(), sort.getValue(),
                                 Long.toString(criteria.getPageNumber() * criteria.getPageSize()), Long.toString(criteria.getPageSize()))
                 )
                 .collectList()

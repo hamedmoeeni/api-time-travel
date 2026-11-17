@@ -2,6 +2,7 @@ package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.adapter.persistence.recording.port.RecordingTimeSeriesRepository;
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
+import hamedmoeeni.api_time_travel.infrastructure.config.ATTConfig;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingStatsService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -12,9 +13,8 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Repository;
 import reactor.core.publisher.Mono;
 
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Set;
+import java.time.Duration;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -32,8 +32,10 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
     private final Logger logger = LoggerFactory.getLogger(RecordingTimeSeriesRepositoryRedisImpl.class);
     private final ReactiveRedisTemplate<String, String> redisTemplate;
     private final Set<String> createdTimeSeries = ConcurrentHashMap.newKeySet();
+    private final ATTConfig attConfig;
 
-    public RecordingTimeSeriesRepositoryRedisImpl(ReactiveRedisConnectionFactory connectionFactory) {
+    public RecordingTimeSeriesRepositoryRedisImpl(ATTConfig attConfig, ReactiveRedisConnectionFactory connectionFactory) {
+        this.attConfig = attConfig;
         this.redisTemplate = buildRedisStringTemplate(connectionFactory);
     }
 
@@ -53,20 +55,26 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
     @Override
     public Mono<Boolean> saveRecordingIgnoreRqquest(Recording recording) {
         String timeSeriesName = responseTimeSeriesName(recording);
-        return createResponseTimeSeries(timeSeriesName, recording)
+        Iterable<? extends Mono<?>> monos = Arrays.stream(ScalarType.values())
+                .map(scalarType -> createResponseTimeSeries(timeSeriesName, scalarType, recording)).toList();
+        return Mono.zip(monos, _ -> true)
                 .then(addToResponseTimeSeries(timeSeriesName, recording));
     }
 
     private String requestTimeSeriesName(Recording recording) {
-        return String.format("req:%s:%s:%s", recording.getMethod(), escapeUrl(recording.getUrl()), recording.getRouteId());
+        return String.format("%s:req:%s:%s:%s", attConfig.getPersistenceEntitiesPrefix(), recording.getMethod(), escapeUrl(recording.getUrl()), recording.getRouteId());
     }
 
     private String responseTimeSeriesName(Recording recording) {
-        return String.format("resp:%s:%s:%s:%s", recording.getMethod(), escapeUrl(recording.getUrl()), recording.getResponseStatus(), recording.getRouteId());
+        return String.format("%s:resp:%s:%s:%s:%s", attConfig.getPersistenceEntitiesPrefix(), recording.getMethod(), escapeUrl(recording.getUrl()), recording.getResponseStatus(), recording.getRouteId());
     }
 
     private String escapeUrl(String url) {
-        return url == null ? null : url.replace("://", "//");
+        return url == null ? null : url.replace(":", "%3A");
+    }
+
+    private String unEscapeUrl(String url) {
+        return url == null ? null : url.replace("%3A", ":");
     }
 
     private Mono<Boolean> createRequestTimeSeries(String timeSeriesName, Recording recording) {
@@ -76,8 +84,11 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
                                     "'TS.CREATE', KEYS[1]" +
                                     ", 'DUPLICATE_POLICY', 'SUM'" +
                                     ", 'labels', 'type', 'request', 'method', KEYS[2], 'url', KEYS[3], 'routeId', KEYS[4]" +
+                                    ",  'scalarType', KEYS[5]" +
                                     ")"),
-                            List.of(timeSeriesName, recording.getMethod(), escapeUrl(recording.getUrl()), recording.getRouteId()))
+                            List.of(timeSeriesName, recording.getMethod(), escapeUrl(recording.getUrl()), recording.getRouteId(),
+                                    ScalarType.COUNT.name()
+                                    ))
                     .collectList()
                     .map(_ -> {
                         createdTimeSeries.add(timeSeriesName);
@@ -96,17 +107,22 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
         return Mono.just(true);
     }
 
-    private Mono<Boolean> createResponseTimeSeries(String timeSeriesName, Recording recording) {
-        if (!createdTimeSeries.contains(timeSeriesName)) {
+    private Mono<Boolean> createResponseTimeSeries(String timeSeriesName, ScalarType scalarType, Recording recording) {
+        String tsName = timeSeriesName + ":" + scalarType.name();
+        if (!createdTimeSeries.contains(tsName)) {
             return redisTemplate.execute(RedisScript.of("redis.call(" +
                                     "'TS.CREATE', KEYS[1]" +
                                     ", 'DUPLICATE_POLICY', 'SUM'" +
-                                    ", 'labels', 'type', 'response', 'method', KEYS[2], 'url', KEYS[3], 'status', KEYS[4], 'routeId', KEYS[5]" +
+                                    ", 'labels', 'type', 'response', 'method', KEYS[2], 'url', KEYS[3], 'status', KEYS[4]" +
+                                    ", 'routeId', KEYS[5], 'scalarType', KEYS[6]" +
                                     ")"),
-                            List.of(timeSeriesName, recording.getMethod(), escapeUrl(recording.getUrl()), String.valueOf(recording.getResponseStatus()), recording.getRouteId()))
+                            List.of(tsName,
+                                    recording.getMethod(), escapeUrl(recording.getUrl()), String.valueOf(recording.getResponseStatus()),
+                                    recording.getRouteId(), scalarType.name()
+                            ))
                     .collectList()
                     .map(_ -> {
-                        createdTimeSeries.add(timeSeriesName);
+                        createdTimeSeries.add(tsName);
                         return true;
                     })
                     .onErrorComplete(throwable -> {
@@ -132,10 +148,17 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
     }
 
     private Mono<Boolean> addToResponseTimeSeries(String timeSeriesName, Recording recording) {
+        String countTimeSeriesName = timeSeriesName + ":" + ScalarType.COUNT.name();
+        String durationTimeSeriesName = timeSeriesName + ":" + ScalarType.DURATION.name();
+        String timestamp = String.valueOf(recording.getTimestamp().toInstant().toEpochMilli());
+
         return redisTemplate.execute(RedisScript.of("redis.call(" +
-                                "'TS.ADD', KEYS[1], KEYS[2], KEYS[3] " +
+                                "'TS.MADD', KEYS[1], KEYS[2], 1, KEYS[3], KEYS[2], KEYS[4]" +
                                 ")"),
-                        List.of(timeSeriesName, String.valueOf(recording.getTimestamp().toInstant().toEpochMilli()), String.valueOf(recording.getDuration())))
+                        List.of(
+                                countTimeSeriesName, timestamp,
+                                durationTimeSeriesName, String.valueOf(recording.getDuration())
+                        ))
                 .collectList()
                 .then(Mono.just(true));
     }
@@ -151,7 +174,7 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
                                 .collectList()
                                 .map(results -> queryLabels.setUrls(
                                         convertQueryLabelResult(results).stream()
-                                                .map(r -> r.replace("//", "://"))
+                                                .map(r -> r.replace("%3A", ":"))
                                                 .collect(Collectors.toList()))
                                 ),
                         redisTemplate.execute(RedisScript.of("return redis.call('TS.QUERYLABELS', 'values', 'status')", List.class))
@@ -174,33 +197,84 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
 
     @Override
     public Mono<List<RecordingStatsService.StatsTimeSeries>> query(RecordingStatsService.StatsQuery statsQuery) {
+        if (statsQuery.getOutputType() == RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME) {
+            return queryWithAggregation(statsQuery, "response", ScalarType.DURATION)
+                    .flatMap(sumResult ->
+                            queryWithAggregation(statsQuery, "response", ScalarType.COUNT)
+                                    .map(countResult -> calculateAvg(sumResult, countResult))
+                    );
+        } else if ("status".equals(statsQuery.getGroupBy()) && statsQuery.getOutputType() == RecordingStatsService.StatsQuery.OutputType.COUNT) {
+            return queryWithAggregation(statsQuery, "response", ScalarType.COUNT);
+        }
+        return queryWithAggregation(statsQuery, "request", ScalarType.COUNT);
+    }
+
+    private List<RecordingStatsService.StatsTimeSeries> calculateAvg(List<RecordingStatsService.StatsTimeSeries> sumResult, List<RecordingStatsService.StatsTimeSeries> countResult) {
+        Map<String, Map<Long, Double>> sumMap = timeSeriesToMap(sumResult);
+        Map<String, Map<Long, Double>> countMap = timeSeriesToMap(countResult);
+        List<RecordingStatsService.StatsTimeSeries> r = new LinkedList<>();
+        countMap.forEach((label, countTs) -> {
+            RecordingStatsService.StatsTimeSeries rs = new RecordingStatsService.StatsTimeSeries()
+                    .setLabel(label)
+                    .setTime(new Long[countTs.size()])
+                    .setValue(new Double[countTs.size()]);
+            int[] i = {0};
+            countTs.forEach((time, count) -> {
+                rs.getTime()[i[0]] = time;
+                rs.getValue()[i[0]] = sumMap.get(label).get(time) / count;
+                i[0]++;
+            });
+
+            r.add(rs);
+        });
+
+        return r;
+    }
+
+    private Map<String, Map<Long, Double>> timeSeriesToMap(List<RecordingStatsService.StatsTimeSeries> sumResult) {
+        Map<String, Map<Long, Double>> r = new LinkedHashMap<>();
+        for (RecordingStatsService.StatsTimeSeries s : sumResult) {
+            Map<Long, Double> m = new LinkedHashMap<>();
+            for (int i = 0; i < s.getTime().length; i++) {
+                m.put(s.getTime()[i], s.getValue()[i]);
+            }
+            r.put(s.getLabel(), m);
+        }
+        return r;
+    }
+
+    private Mono<List<RecordingStatsService.StatsTimeSeries>> queryWithAggregation(RecordingStatsService.StatsQuery statsQuery, String type, ScalarType scalarType) {
         String script = "";
         List<String> keys = Stream.of(
                         statsQuery.getFromTimestamp() == null ? "-" : statsQuery.getFromTimestamp().toString(),
                         statsQuery.getToTimestamp() == null ? "+" : statsQuery.getToTimestamp().toString(),
-                        typeFilterString(statsQuery),
+                        "SUM",
+                        aggregationBucketDurationString(statsQuery),
+                        "scalarType=" + scalarType.name(),
+                        "type=" + type,
                         methodFilterString(statsQuery),
                         routeIdFilterString(statsQuery),
                         urlFilterString(statsQuery),
                         statusFilterString(statsQuery),
                         statsQuery.getGroupBy() == null ? "method" : statsQuery.getGroupBy(),
-                        statsQuery.getOutputType() == RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME ? "AVG" : "SUM"
+                        "SUM"
                 )
                 .filter(s -> !s.isBlank())
                 .toList();
         switch (keys.size()) {
-            case 5 ->
-                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'FILTER', KEYS[3], 'GROUPBY', KEYS[4], 'REDUCE', KEYS[5])";
-            case 6 ->
-                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'FILTER', KEYS[3], KEYS[4], 'GROUPBY', KEYS[5], 'REDUCE', KEYS[6])";
             case 7 ->
-                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'FILTER', KEYS[3], KEYS[4], KEYS[5], 'GROUPBY', KEYS[6], 'REDUCE', KEYS[7])";
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], 'GROUPBY', KEYS[6], 'REDUCE', KEYS[7])";
             case 8 ->
-                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'FILTER', KEYS[3], KEYS[4], KEYS[5], KEYS[6], 'GROUPBY', KEYS[7], 'REDUCE', KEYS[8])";
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], KEYS[6], 'GROUPBY', KEYS[7], 'REDUCE', KEYS[8])";
             case 9 ->
-                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'FILTER', KEYS[3], KEYS[4], KEYS[5], KEYS[6], KEYS[7], 'GROUPBY', KEYS[8], 'REDUCE', KEYS[9])";
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], KEYS[6], KEYS[7], 'GROUPBY', KEYS[8], 'REDUCE', KEYS[9])";
+            case 10 ->
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], KEYS[6], KEYS[7], KEYS[8], 'GROUPBY', KEYS[9], 'REDUCE', KEYS[10])";
+            case 11 ->
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], KEYS[6], KEYS[7], KEYS[8], KEYS[9], 'GROUPBY', KEYS[10], 'REDUCE', KEYS[11])";
+            case 12 ->
+                    script = "return redis.call('TS.MRANGE', KEYS[1], KEYS[2], 'AGGREGATION', KEYS[3], KEYS[4], 'FILTER', KEYS[5], KEYS[6], KEYS[7], KEYS[8], KEYS[9], KEYS[10], 'GROUPBY', KEYS[11], 'REDUCE', KEYS[12])";
         }
-
 
         return redisTemplate.execute(RedisScript.of(script, List.class), keys)
                 .collectList()
@@ -208,25 +282,24 @@ public class RecordingTimeSeriesRepositoryRedisImpl implements RecordingTimeSeri
                     List<RecordingStatsService.StatsTimeSeries> result = convertQueryResult(lists);
                     result.forEach(r -> {
                         if (r.getLabel() != null) {
-                            r.setLabel(r.getLabel()
-                                    .replaceFirst("type=", "")
-                                    .replaceFirst("method=", "")
-                                    .replaceFirst("routeId=", "")
-                                    .replaceFirst("url=", "")
-                                    .replaceFirst("status=", "")
-                            );
+                            if (r.getLabel().startsWith("url=")) {
+                                r.setLabel(unEscapeUrl(r.getLabel().replaceFirst("url=", "")));
+                            } else {
+                                r.setLabel(r.getLabel()
+                                        .replaceFirst("type=", "")
+                                        .replaceFirst("method=", "")
+                                        .replaceFirst("routeId=", "")
+                                        .replaceFirst("status=", "")
+                                );
+                            }
                         }
                     });
                     return result;
                 });
     }
 
-    private String typeFilterString(RecordingStatsService.StatsQuery statsQuery) {
-        if (statsQuery.getOutputType() != null && statsQuery.getOutputType() == RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME) {
-            return "type=response";
-        } else {
-            return "type=request";
-        }
+    private String aggregationBucketDurationString(RecordingStatsService.StatsQuery ignoredStatsQuery) {
+        return String.valueOf(Duration.ofMinutes(1).toMillis());
     }
 
     private String methodFilterString(RecordingStatsService.StatsQuery statsQuery) {

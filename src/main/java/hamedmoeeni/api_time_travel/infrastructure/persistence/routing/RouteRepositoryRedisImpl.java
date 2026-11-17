@@ -2,6 +2,7 @@ package hamedmoeeni.api_time_travel.infrastructure.persistence.routing;
 
 import hamedmoeeni.api_time_travel.adapter.persistence.routing.port.RouteRepository;
 import hamedmoeeni.api_time_travel.domain.routing.Route;
+import hamedmoeeni.api_time_travel.infrastructure.config.ATTConfig;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
 import org.springframework.data.redis.core.ReactiveHashOperations;
@@ -22,11 +23,12 @@ import static hamedmoeeni.api_time_travel.infrastructure.persistence.RedisUtils.
         matchIfMissing = true //redis is default persistence repository
 )
 class RouteRepositoryRedisImpl implements RouteRepository {
-    private static final String ROUTE_ENTITY_NAME = "RouteEntity";
+    private final String entityName;
     private final RouteEntityMapper routeEntityMapper;
     private final ReactiveHashOperations<String, String, RouteEntity> redisOperations;
 
-    public RouteRepositoryRedisImpl(RouteEntityMapper routeEntityMapper, ReactiveRedisConnectionFactory connectionFactory) {
+    public RouteRepositoryRedisImpl(ATTConfig attConfig, RouteEntityMapper routeEntityMapper, ReactiveRedisConnectionFactory connectionFactory) {
+        this.entityName = attConfig.getPersistenceEntitiesPrefix() + ":RouteEntity";
         this.routeEntityMapper = routeEntityMapper;
         this.redisOperations = buildRedisTemplate(connectionFactory, RouteEntity.class).opsForHash();
     }
@@ -34,13 +36,13 @@ class RouteRepositoryRedisImpl implements RouteRepository {
 
     @Override
     public Flux<Route> findAllRoutes() {
-        return redisOperations.entries(ROUTE_ENTITY_NAME)
+        return redisOperations.entries(entityName)
                 .map(e -> routeEntityMapper.fromRouteEntity(e.getValue()));
     }
 
     @Override
     public Mono<Boolean> saveRoutes(Collection<Route> routes) {
-        return redisOperations.putAll(ROUTE_ENTITY_NAME, routes.stream().map(route ->
+        return redisOperations.putAll(entityName, routes.stream().map(route ->
                                 route.getId() == null ? route.setId(UUID.randomUUID().toString()) : route
                         )
                         .collect(Collectors.toMap(
@@ -52,7 +54,7 @@ class RouteRepositoryRedisImpl implements RouteRepository {
 
     @Override
     public Mono<Boolean> deleteById(Collection<String> routeIds) {
-        return redisOperations.remove(ROUTE_ENTITY_NAME, routeIds.toArray())
+        return redisOperations.remove(entityName, routeIds.toArray())
                 .map(_ -> true);
     }
 }

@@ -11,3 +11,4 @@ att:
   management:
     uri-path: /mgmt
   persistence-type: REDIS
+  persistence-entities-prefix: ATT
