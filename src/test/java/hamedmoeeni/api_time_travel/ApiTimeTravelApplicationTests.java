@@ -7,6 +7,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webtestclient.autoconfigure.AutoConfigureWebTestClient;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.reactive.server.WebTestClient;
 import org.springframework.web.reactive.function.BodyInserters;
 import org.wiremock.spring.ConfigureWireMock;
@@ -17,6 +18,7 @@ import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 
+@ActiveProfiles("integration-test")
 @SpringBootTest
 @AutoConfigureWebTestClient
 @EnableWireMock({
@@ -43,20 +45,20 @@ class ApiTimeTravelApplicationTests {
     @Test
     void path(@Autowired WebTestClient webTestClient) {
         String randomResponse = "test response " + UUID.randomUUID();
-        stubFor(get("/test").willReturn(ok(randomResponse)));
+        stubFor(get("/testpath").willReturn(ok(randomResponse)));
 
         webTestClient.post().uri(managementUri + "/routes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(BodyInserters.fromValue(List.of(
                         new RouteDto()
                                 .setPriority(1)
-                                .setSourcePath("/test")
+                                .setSourcePath("/testpath")
                                 .setDestinationHostUri(wireMockUrl)
                 )))
                 .exchange()
                 .expectStatus().isOk();
 
-        webTestClient.get().uri("/test")
+        webTestClient.get().uri("/testpath")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class).isEqualTo(randomResponse);
@@ -65,20 +67,20 @@ class ApiTimeTravelApplicationTests {
     @Test
     void method(@Autowired WebTestClient webTestClient) {
         String randomResponse = "test response " + UUID.randomUUID();
-        stubFor(patch("/test").willReturn(ok(randomResponse)));
+        stubFor(patch("/testmethod").willReturn(ok(randomResponse)));
 
         webTestClient.post().uri(managementUri + "/routes")
                 .contentType(MediaType.APPLICATION_JSON)
                 .body(BodyInserters.fromValue(List.of(
                         new RouteDto()
-                                .setPriority(1)
+                                .setPriority(2)
                                 .setMethod("patch")
                                 .setDestinationHostUri(wireMockUrl)
                 )))
                 .exchange()
                 .expectStatus().isOk();
 
-        webTestClient.patch().uri("/test")
+        webTestClient.patch().uri("/testmethod")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class).isEqualTo(randomResponse);
@@ -87,7 +89,7 @@ class ApiTimeTravelApplicationTests {
     @Test
     void host(@Autowired WebTestClient webTestClient) {
         String randomResponse = "test response " + UUID.randomUUID();
-        stubFor(get("/test").willReturn(ok(randomResponse)));
+        stubFor(get("/testhost").willReturn(ok(randomResponse)));
 
         webTestClient.post().uri(managementUri + "/routes")
                 .contentType(MediaType.APPLICATION_JSON)
@@ -100,17 +102,17 @@ class ApiTimeTravelApplicationTests {
                 .exchange()
                 .expectStatus().isOk();
 
-        webTestClient.get().uri("/test")
+        webTestClient.get().uri("/testhost")
                 .header("Host", "myHost")
                 .exchange()
                 .expectStatus().isOk()
                 .expectBody(String.class).isEqualTo(randomResponse);
 
-        webTestClient.get().uri("/test")
+        webTestClient.get().uri("/testhost")
                 .exchange()
                 .expectStatus().isNotFound();
 
-        webTestClient.get().uri("/test")
+        webTestClient.get().uri("/testhost")
                 .header("Host", "anotherHost")
                 .exchange()
                 .expectStatus().isNotFound();

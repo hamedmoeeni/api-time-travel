@@ -1,16 +1,17 @@
 package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
+import hamedmoeeni.api_time_travel.infrastructure.config.ATTConfig;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingStatsService;
 import org.hamcrest.Matchers;
-import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.parallel.Execution;
 import org.junit.jupiter.api.parallel.ExecutionMode;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.text.DecimalFormat;
 import java.time.LocalDateTime;
@@ -20,18 +21,20 @@ import java.util.List;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 
-@Profile("infrastructure-test")
+@ActiveProfiles("integration-test")
 @Execution(ExecutionMode.SAME_THREAD)
 @SpringBootTest
 public class RecordingTimeSeriesRepositoryRedisITest {
     @Autowired
-    private RecordingTimeSeriesRepositoryRedisImpl recordingTimeSeriesRepositoryRedis;
-    @Autowired
     private ReactiveRedisConnectionFactory redisConnectionFactory;
+    @Autowired
+    private ATTConfig attConfig;
+    private RecordingTimeSeriesRepositoryRedisImpl recordingTimeSeriesRepositoryRedis;
 
-    @AfterEach
+    @BeforeEach
     public void setUp() {
         redisConnectionFactory.getReactiveConnection().serverCommands().flushDb().block();
+        recordingTimeSeriesRepositoryRedis = new RecordingTimeSeriesRepositoryRedisImpl(attConfig, redisConnectionFactory);
     }
 
     private void saveRequest(String requestId, String routeId, String url, String method, String timestamp) {
@@ -173,71 +176,78 @@ public class RecordingTimeSeriesRepositoryRedisITest {
         /*
          * In the first minute there are 3 GET requests with average of 2
          */
-        saveResponse("requestId-1", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:03", 200, 1L);
-        saveResponse("requestId-2", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:20", 200, 2L);
-        saveResponse("requestId-3", "routeId-1", "http://test/path1", "GET", "2000-01-01 00:00:47", 503, 3L);
+        saveResponse("requestId-1", "routeId-1", "http://test/path1", "GET", "2001-01-01 00:00:03", 200, 1L);
+        saveResponse("requestId-2", "routeId-1", "http://test/path1", "GET", "2001-01-01 00:00:20", 200, 2L);
+        saveResponse("requestId-3", "routeId-1", "http://test/path1", "GET", "2001-01-01 00:00:47", 503, 3L);
 
         /*
          * In the third minute, there are 2 POST request with average of 4.5
          */
-        saveResponse("requestId-4", "routeId-2", "http://test/path2", "POST", "2000-01-01 00:02:00", 200, 4L);
-        saveResponse("requestId-5", "routeId-2", "http://test/path2", "POST", "2000-01-01 00:02:59", 503, 5L);
+        saveResponse("requestId-4", "routeId-2", "http://test/path2", "POST", "2001-01-01 00:02:00", 200, 4L);
+        saveResponse("requestId-5", "routeId-2", "http://test/path2", "POST", "2001-01-01 00:02:59", 503, 5L);
+
+        Long fromTimestamp = LocalDateTime.parse("2001-01-01 00:00:00", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(ZoneOffset.UTC).toInstant().toEpochMilli();
+        Long toTimestamp = LocalDateTime.parse("2001-01-01 01:00:00", DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")).atZone(ZoneOffset.UTC).toInstant().toEpochMilli();
 
         // Group by routeId
         List<RecordingStatsService.StatsTimeSeries> queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
                         .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setFromTimestamp(fromTimestamp).setToTimestamp(toTimestamp)
                         .setGroupBy("routeId")
         ).block();
 
         assertThat(queryResult, Matchers.hasSize(2));
         assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("routeId-1"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{978307200000L}));
         assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
         assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("routeId-2"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{978307320000L}));
         assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
 
         // Group by url
         queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
                         .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setFromTimestamp(fromTimestamp).setToTimestamp(toTimestamp)
                         .setGroupBy("url")
         ).block();
         assertThat(queryResult, Matchers.hasSize(2));
         assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("http://test/path1"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{978307200000L}));
         assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
         assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("http://test/path2"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{978307320000L}));
         assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
 
         // Group by http method
         queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
                         .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setFromTimestamp(fromTimestamp).setToTimestamp(toTimestamp)
                         .setGroupBy("method")
         ).block();
         assertThat(queryResult, Matchers.hasSize(2));
         assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("GET"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L}));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{978307200000L}));
         assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{2.0}));
         assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("POST"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684920000L}));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{978307320000L}));
         assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{4.5}));
 
         // Group by status
         queryResult = recordingTimeSeriesRepositoryRedis.query(
                 new RecordingStatsService.StatsQuery()
                         .setOutputType(RecordingStatsService.StatsQuery.OutputType.AVG_RESPONSE_TIME)
+                        .setFromTimestamp(fromTimestamp).setToTimestamp(toTimestamp)
                         .setGroupBy("status")
         ).block();
         assertThat(queryResult, Matchers.hasSize(2));
         assertThat(queryResult.getFirst().getLabel(), Matchers.equalTo("200"));
-        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.getFirst().getTime(), Matchers.equalTo(new Long[]{978307200000L, 978307320000L}));
         assertThat(queryResult.getFirst().getValue(), Matchers.equalTo(new Double[]{1.5, 4.0}));
         assertThat(queryResult.get(1).getLabel(), Matchers.equalTo("503"));
-        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{946684800000L, 946684920000L}));
+        assertThat(queryResult.get(1).getTime(), Matchers.equalTo(new Long[]{978307200000L, 978307320000L}));
         assertThat(queryResult.get(1).getValue(), Matchers.equalTo(new Double[]{3.0, 5.0}));
     }
 }

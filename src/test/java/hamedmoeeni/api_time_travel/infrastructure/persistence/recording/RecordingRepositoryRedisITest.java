@@ -1,14 +1,15 @@
 package hamedmoeeni.api_time_travel.infrastructure.persistence.recording;
 
 import hamedmoeeni.api_time_travel.domain.recording.Recording;
+import hamedmoeeni.api_time_travel.infrastructure.config.ATTConfig;
 import hamedmoeeni.api_time_travel.usecase.recording.RecordingSearchService;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.context.annotation.Profile;
 import org.springframework.data.redis.connection.ReactiveRedisConnectionFactory;
+import org.springframework.test.context.ActiveProfiles;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
@@ -17,18 +18,22 @@ import java.util.Iterator;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 
-@Profile("infrastructure-test")
+@ActiveProfiles("integration-test")
 @SpringBootTest
 public class RecordingRepositoryRedisITest {
 
     @Autowired
-    private RecordingRepositoryRedisImpl recordingRepositoryRedis;
-    @Autowired
     private ReactiveRedisConnectionFactory redisConnectionFactory;
+    @Autowired
+    private ATTConfig attConfig;
+    @Autowired
+    private RecordingEntityMapper recordingEntityMapper;
+    private RecordingRepositoryRedisImpl recordingRepositoryRedis;
 
     @BeforeEach
     public void setUp() {
-        redisConnectionFactory.getReactiveConnection().serverCommands().flushAll().subscribe();
+        redisConnectionFactory.getReactiveConnection().serverCommands().flushDb().block();
+        recordingRepositoryRedis = new RecordingRepositoryRedisImpl(attConfig, recordingEntityMapper, redisConnectionFactory);
         recordingRepositoryRedis.init();
     }
 
@@ -41,14 +46,14 @@ public class RecordingRepositoryRedisITest {
                 .setMethod("testMethod1")
                 .setDuration(1L)
                 .setResponseStatus(200)
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli()),ZoneOffset.UTC));
+                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli()), ZoneOffset.UTC));
 
         Recording recording2 = new Recording()
                 .setRequestId("testRequestId2")
                 .setRouteId("testRouteId1")
                 .setUrl("http://myHost/myPath2")
                 .setMethod("testMethod2")
-                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli()),ZoneOffset.UTC));
+                .setTimestamp(ZonedDateTime.ofInstant(Instant.ofEpochMilli(ZonedDateTime.now(ZoneOffset.UTC).toInstant().toEpochMilli()), ZoneOffset.UTC));
 
         Boolean upsertResult = recordingRepositoryRedis.upsertIgnoreResponse(
                 new Recording()

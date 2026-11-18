@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationEventPublisher;
@@ -143,6 +144,12 @@ class RecordingGatewayFilter implements GlobalFilter, Ordered, RecordingDataColl
         //Ids
         String requestId = exchange.getAttribute(ServerWebExchange.LOG_ID_ATTRIBUTE);
         String routeId = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_PREDICATE_MATCHED_PATH_ROUTE_ID_ATTR);
+        if(routeId==null){
+            Object route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+            if(route instanceof Route){
+                routeId=((Route) route).getId();
+            }
+        }
         //Request details
         ServerHttpRequest request = exchange.getRequest();
         String url = request.getURI().toString();
